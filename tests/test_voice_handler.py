@@ -13,9 +13,6 @@ def _env_vars(monkeypatch, voice_config):
     monkeypatch.setenv("SNS_TOPIC_ARN", voice_config.sns_topic_arn)
     monkeypatch.setenv("INCIDENTS_TABLE_NAME", voice_config.incidents_table_name)
     monkeypatch.setenv("CONNECT_ENABLED", "true")
-    monkeypatch.setenv("CONNECT_INSTANCE_ID", voice_config.connect_instance_id)
-    monkeypatch.setenv("CONNECT_CONTACT_FLOW_ID", voice_config.connect_contact_flow_id)
-    monkeypatch.setenv("CONNECT_PHONE_NUMBER", voice_config.connect_phone_number)
     monkeypatch.setenv("ONCALL_PHONE", voice_config.oncall_phone)
 
 

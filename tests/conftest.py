@@ -36,9 +36,6 @@ def voice_config() -> FlareConfig:
         token_budget=100_000,
         max_output_tokens=4096,
         connect_enabled=True,
-        connect_instance_id="test-instance-id",
-        connect_contact_flow_id="test-flow-id",
-        connect_phone_number="+15551234567",
         oncall_phone="+15559876543",
         incidents_table_name="flare-incidents-test",
     )

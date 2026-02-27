@@ -27,9 +27,6 @@ class FlareConfig:
     token_budget: int = 0  # 0 = use model context window
     max_output_tokens: int = 4096
     connect_enabled: bool = False
-    connect_instance_id: str = ""
-    connect_contact_flow_id: str = ""
-    connect_phone_number: str = ""
     oncall_phone: str = ""
     incidents_table_name: str = ""
 
@@ -64,9 +61,6 @@ class FlareConfig:
             token_budget=int(os.environ.get("TOKEN_BUDGET", "0")),
             max_output_tokens=int(os.environ.get("MAX_OUTPUT_TOKENS", "4096")),
             connect_enabled=os.environ.get("CONNECT_ENABLED", "").lower() == "true",
-            connect_instance_id=os.environ.get("CONNECT_INSTANCE_ID", ""),
-            connect_contact_flow_id=os.environ.get("CONNECT_CONTACT_FLOW_ID", ""),
-            connect_phone_number=os.environ.get("CONNECT_PHONE_NUMBER", ""),
             oncall_phone=os.environ.get("ONCALL_PHONE", ""),
             incidents_table_name=os.environ.get("INCIDENTS_TABLE_NAME", ""),
         )

@@ -1,4 +1,4 @@
-.PHONY: deploy teardown test lint
+.PHONY: deploy deploy-voice deploy-all teardown teardown-voice teardown-all test lint
 
 STACK_NAME := flare
 REGION     ?= us-east-1
@@ -20,9 +20,8 @@ SUBSCRIPTION_FILTER ?=
 LOOKBACK_MINUTES ?=
 TOKEN_BUDGET     ?=
 
-# Voice (optional -- provisions Connect + Lex automatically)
-CONNECT_ENABLED ?=
-ONCALL_PHONE    ?=
+# Voice
+ONCALL_PHONE ?=
 
 define check_param
 $(if $($(1)),,$(error $(1) is required. Usage: make deploy $(1)=<value>))
@@ -57,12 +56,6 @@ endif
 ifneq ($(TOKEN_BUDGET),)
 	OVERRIDES += TokenBudget=$(TOKEN_BUDGET)
 endif
-ifneq ($(CONNECT_ENABLED),)
-	OVERRIDES += ConnectEnabled=$(CONNECT_ENABLED)
-endif
-ifneq ($(ONCALL_PHONE),)
-	OVERRIDES += OncallPhone=$(ONCALL_PHONE)
-endif
 
 deploy:
 	$(call check_param,EMAIL)
@@ -75,9 +68,58 @@ deploy:
 		--parameter-overrides $(OVERRIDES)
 	@echo "Done. Check your email to confirm the SNS subscription."
 
+deploy-voice:
+	$(call check_param,ONCALL_PHONE)
+	$(call check_param,LOG_GROUP_PATTERNS)
+	aws cloudformation deploy \
+		--template-file voice-template.yaml \
+		--stack-name $(STACK_NAME)-voice \
+		--region $(REGION) \
+		--capabilities CAPABILITY_IAM \
+		--parameter-overrides \
+			BaseStackName=$(STACK_NAME) \
+			OncallPhone=$(ONCALL_PHONE) \
+			LogGroupPatterns=$(LOG_GROUP_PATTERNS)
+	@echo "Configuring Lex bot fulfillment and Connect associations..."
+	@INSTANCE_ARN=$$(aws cloudformation describe-stacks --stack-name $(STACK_NAME)-voice --region $(REGION) \
+		--query 'Stacks[0].Outputs[?OutputKey==`FlareConnectInstanceArn`].OutputValue' --output text) && \
+	BOT_ALIAS_ARN=$$(aws cloudformation describe-stacks --stack-name $(STACK_NAME)-voice --region $(REGION) \
+		--query 'Stacks[0].Outputs[?OutputKey==`FlareBotAliasArn`].OutputValue' --output text) && \
+	BOT_ID=$$(aws cloudformation describe-stacks --stack-name $(STACK_NAME)-voice --region $(REGION) \
+		--query 'Stacks[0].Outputs[?OutputKey==`FlareBotId`].OutputValue' --output text) && \
+	LAMBDA_ARN=$$(aws cloudformation describe-stacks --stack-name $(STACK_NAME)-voice --region $(REGION) \
+		--query 'Stacks[0].Outputs[?OutputKey==`FlareVoiceHandlerArn`].OutputValue' --output text) && \
+	ALIAS_ID=$$(echo "$$BOT_ALIAS_ARN" | grep -o '[^/]*$$') && \
+	aws lexv2-models update-bot-alias --bot-id "$$BOT_ID" --bot-alias-id "$$ALIAS_ID" \
+		--bot-alias-name live --bot-version "$$(aws lexv2-models describe-bot-alias --bot-id $$BOT_ID --bot-alias-id $$ALIAS_ID --region $(REGION) --query 'botVersion' --output text)" \
+		--bot-alias-locale-settings '{"en_US":{"enabled":true,"codeHookSpecification":{"lambdaCodeHook":{"lambdaARN":"'"$$LAMBDA_ARN"'","codeHookInterfaceVersion":"1.0"}}}}' \
+		--region $(REGION) > /dev/null && \
+	aws connect associate-bot --instance-id "$$INSTANCE_ARN" \
+		--lex-v2-bot AliasArn="$$BOT_ALIAS_ARN" --region $(REGION) 2>/dev/null || true
+	@echo "Updating base stack to enable voice..."
+	@aws cloudformation deploy \
+		--template-file template.yaml \
+		--stack-name $(STACK_NAME) \
+		--region $(REGION) \
+		--capabilities CAPABILITY_IAM \
+		--parameter-overrides $(OVERRIDES) ConnectEnabled=true OncallPhone=$(ONCALL_PHONE)
+	@echo "Voice pipeline active. Your phone will ring on incidents."
+
+deploy-all: deploy deploy-voice
+
+teardown-voice:
+	aws cloudformation delete-stack --stack-name $(STACK_NAME)-voice --region $(REGION)
+	@echo "Voice stack deletion initiated."
+
 teardown:
 	aws cloudformation delete-stack --stack-name $(STACK_NAME) --region $(REGION)
-	@echo "Stack deletion initiated (includes Connect instance and Lex bot if voice was enabled)."
+	@echo "Base stack deletion initiated."
+
+teardown-all: teardown-voice
+	@echo "Waiting for voice stack to delete before removing base stack..."
+	aws cloudformation wait stack-delete-complete --stack-name $(STACK_NAME)-voice --region $(REGION) 2>/dev/null || true
+	aws cloudformation delete-stack --stack-name $(STACK_NAME) --region $(REGION)
+	@echo "All stacks deletion initiated."
 
 test:
 	pytest -v

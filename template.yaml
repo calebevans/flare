@@ -110,13 +110,13 @@ Parameters:
     MinValue: 60
     MaxValue: 900
 
-  # --- Voice / Connect (optional) ---
+  # --- Voice (set by voice stack, not by user) ---
 
   ConnectEnabled:
     Type: String
     Default: "false"
     AllowedValues: ["true", "false"]
-    Description: Enable outbound voice calling via Amazon Connect
+    Description: Set to true when the voice stack is deployed
 
   OncallPhone:
     Type: String
@@ -129,7 +129,6 @@ Conditions:
   AlarmPrefixProvided: !Not [!Equals [!Ref AlarmNamePrefix, ""]]
   SubscriptionEnabled: !Equals [!Ref EnableSubscription, "true"]
   SubscriptionLogGroupProvided: !Not [!Equals [!Ref SubscriptionLogGroup, ""]]
-  VoiceEnabled: !Equals [!Ref ConnectEnabled, "true"]
 
 Resources:
 
@@ -146,24 +145,6 @@ Resources:
       TopicArn: !Ref FlareSNSTopic
       Protocol: email
       Endpoint: !Ref NotificationEmail
-
-  # --- DynamoDB (voice pipeline state) ---
-
-  FlareIncidentsTable:
-    Type: AWS::DynamoDB::Table
-    Condition: VoiceEnabled
-    Properties:
-      TableName: !Sub "flare-incidents-${AWS::StackName}"
-      BillingMode: PAY_PER_REQUEST
-      AttributeDefinitions:
-        - AttributeName: incident_id
-          AttributeType: S
-      KeySchema:
-        - AttributeName: incident_id
-          KeyType: HASH
-      TimeToLiveSpecification:
-        AttributeName: ttl
-        Enabled: true
 
   # --- IAM ---
 
@@ -209,79 +190,23 @@ Resources:
                 Action:
                   - sns:Publish
                 Resource: !Ref FlareSNSTopic
-        - !If
-          - VoiceEnabled
-          - PolicyName: FlareDynamoDBWrite
-            PolicyDocument:
-              Version: "2012-10-17"
-              Statement:
-                - Effect: Allow
-                  Action:
-                    - dynamodb:PutItem
-                    - dynamodb:UpdateItem
-                  Resource: !GetAtt FlareIncidentsTable.Arn
-          - !Ref AWS::NoValue
-        - !If
-          - VoiceEnabled
-          - PolicyName: FlareConnectOutbound
-            PolicyDocument:
-              Version: "2012-10-17"
-              Statement:
-                - Effect: Allow
-                  Action:
-                    - connect:StartOutboundVoiceContact
-                  Resource: !Sub "arn:aws:connect:${AWS::Region}:${AWS::AccountId}:instance/*/contact/*"
-          - !Ref AWS::NoValue
-
-  FlareVoiceHandlerRole:
-    Type: AWS::IAM::Role
-    Condition: VoiceEnabled
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-      Policies:
-        - PolicyName: VoiceDynamoDBRead
+        - PolicyName: FlareVoicePermissions
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
               - Effect: Allow
                 Action:
-                  - dynamodb:GetItem
-                Resource: !GetAtt FlareIncidentsTable.Arn
-        - PolicyName: VoiceCloudWatchRead
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                Resource: !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/flare-incidents-*"
               - Effect: Allow
                 Action:
-                  - logs:DescribeLogGroups
-                  - logs:FilterLogEvents
-                  - logs:GetLogEvents
-                  - logs:DescribeLogStreams
-                  - cloudwatch:GetMetricStatistics
-                  - cloudwatch:ListMetrics
-                  - ec2:DescribeInstanceStatus
-                  - ecs:DescribeServices
-                  - rds:DescribeDBInstances
-                  - lambda:GetFunction
-                Resource: "*"
-        - PolicyName: VoiceBedrockInvoke
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
+                  - connect:StartOutboundVoiceContact
+                Resource: !Sub "arn:aws:connect:${AWS::Region}:${AWS::AccountId}:instance/*/contact/*"
               - Effect: Allow
                 Action:
-                  - bedrock:InvokeModel
-                Resource:
-                  - !Sub "arn:aws:bedrock:${BedrockRegion}::foundation-model/amazon.nova-*"
-                  - !Sub "arn:aws:bedrock:us.*::foundation-model/amazon.nova-*"
+                  - ssm:GetParameter
+                Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/flare/*"
 
   # --- Lambda ---
 
@@ -305,371 +230,9 @@ Resources:
           CORDON_K_NEIGHBORS: !Ref CordonKNeighbors
           TOKEN_BUDGET: !Ref TokenBudget
           CONNECT_ENABLED: !Ref ConnectEnabled
-          CONNECT_INSTANCE_ID: !If
-            - VoiceEnabled
-            - !GetAtt FlareConnectInstance.Id
-            - ""
-          CONNECT_CONTACT_FLOW_ID: !If
-            - VoiceEnabled
-            - !GetAtt FlareContactFlow.ContactFlowArn
-            - ""
-          CONNECT_PHONE_NUMBER: !If
-            - VoiceEnabled
-            - !GetAtt FlarePhoneNumber.Address
-            - ""
           ONCALL_PHONE: !Ref OncallPhone
-          INCIDENTS_TABLE_NAME: !If
-            - VoiceEnabled
-            - !Ref FlareIncidentsTable
-            - ""
-
-  # --- Voice Handler Lambda (Connect briefing + Lex fulfillment) ---
-
-  FlareVoiceHandlerFunction:
-    Type: AWS::Lambda::Function
-    Condition: VoiceEnabled
-    Properties:
-      FunctionName: !Sub "flare-voice-${AWS::StackName}"
-      PackageType: Image
-      Code:
-        ImageUri: !Ref EcrImageUri
-      Role: !GetAtt FlareVoiceHandlerRole.Arn
-      MemorySize: 512
-      Timeout: 10
-      Environment:
-        Variables:
-          LOG_GROUP_PATTERNS: !Join [",", !Ref LogGroupPatterns]
-          SNS_TOPIC_ARN: !Ref FlareSNSTopic
-          BEDROCK_REGION: !Ref BedrockRegion
-          INCIDENTS_TABLE_NAME: !Ref FlareIncidentsTable
-
-  FlareVoiceHandlerConnectPermission:
-    Type: AWS::Lambda::Permission
-    Condition: VoiceEnabled
-    Properties:
-      FunctionName: !Ref FlareVoiceHandlerFunction
-      Action: lambda:InvokeFunction
-      Principal: connect.amazonaws.com
-
-  FlareVoiceHandlerLexPermission:
-    Type: AWS::Lambda::Permission
-    Condition: VoiceEnabled
-    Properties:
-      FunctionName: !Ref FlareVoiceHandlerFunction
-      Action: lambda:InvokeFunction
-      Principal: lex.amazonaws.com
-
-  # --- Amazon Connect (auto-provisioned) ---
-
-  FlareConnectInstance:
-    Type: AWS::Connect::Instance
-    Condition: VoiceEnabled
-    Properties:
-      IdentityManagementType: CONNECT_MANAGED
-      InstanceAlias: !Sub "flare-${AWS::StackName}"
-      Attributes:
-        InboundCalls: true
-        OutboundCalls: true
-        ContactflowLogs: true
-
-  FlarePhoneNumber:
-    Type: AWS::Connect::PhoneNumber
-    Condition: VoiceEnabled
-    Properties:
-      TargetArn: !GetAtt FlareConnectInstance.Arn
-      CountryCode: US
-      Type: DID
-      Description: Flare outbound calling
-
-  FlareLambdaAssociation:
-    Type: AWS::Connect::IntegrationAssociation
-    Condition: VoiceEnabled
-    Properties:
-      InstanceId: !GetAtt FlareConnectInstance.Arn
-      IntegrationType: LAMBDA_FUNCTION
-      IntegrationArn: !GetAtt FlareVoiceHandlerFunction.Arn
-
-  FlareLexAssociation:
-    Type: AWS::Connect::IntegrationAssociation
-    Condition: VoiceEnabled
-    DependsOn: FlareBotAlias
-    Properties:
-      InstanceId: !GetAtt FlareConnectInstance.Arn
-      IntegrationType: LEX_BOT
-      IntegrationArn: !GetAtt FlareBotAlias.Arn
-
-  FlareContactFlow:
-    Type: AWS::Connect::ContactFlow
-    Condition: VoiceEnabled
-    DependsOn:
-      - FlareLambdaAssociation
-      - FlareLexAssociation
-    Properties:
-      InstanceArn: !GetAtt FlareConnectInstance.Arn
-      Name: !Sub "flare-incident-commander-${AWS::StackName}"
-      Type: CONTACT_FLOW
-      Content: !Sub |
-        {
-          "Version": "2019-10-30",
-          "StartAction": "SetVoice",
-          "Actions": [
-            {
-              "Identifier": "SetVoice",
-              "Type": "MessageParticipant",
-              "Parameters": {
-                "PromptId": ""
-              },
-              "Transitions": {
-                "NextAction": "InvokeBriefing"
-              }
-            },
-            {
-              "Identifier": "InvokeBriefing",
-              "Type": "InvokeLambdaFunction",
-              "Parameters": {
-                "LambdaFunctionARN": "${FlareVoiceHandlerFunction.Arn}",
-                "InvocationTimeLimitSeconds": "8",
-                "ResponseValidation": {
-                  "ResponseType": "STRING_MAP"
-                }
-              },
-              "Transitions": {
-                "NextAction": "PlayBriefing",
-                "Errors": [
-                  {
-                    "NextAction": "PlayError",
-                    "ErrorType": "NoMatchingError"
-                  }
-                ]
-              }
-            },
-            {
-              "Identifier": "PlayBriefing",
-              "Type": "MessageParticipant",
-              "Parameters": {
-                "Text": "Hi, this is Flare, your incident commander. $.External.rca_summary . I'm available to help investigate. What would you like to know?"
-              },
-              "Transitions": {
-                "NextAction": "GetInput"
-              }
-            },
-            {
-              "Identifier": "GetInput",
-              "Type": "GetParticipantInput",
-              "Parameters": {
-                "LexV2Bot": {
-                  "AliasArn": "${FlareBotAlias.Arn}"
-                },
-                "LexSessionAttributes": {
-                  "incident_id": "$.Attributes.incident_id"
-                }
-              },
-              "Transitions": {
-                "NextAction": "Disconnect",
-                "Errors": [
-                  {
-                    "NextAction": "PlayError",
-                    "ErrorType": "NoMatchingError"
-                  }
-                ]
-              }
-            },
-            {
-              "Identifier": "PlayError",
-              "Type": "MessageParticipant",
-              "Parameters": {
-                "Text": "Sorry, I encountered a technical issue. The incident analysis has been sent to your email."
-              },
-              "Transitions": {
-                "NextAction": "Disconnect"
-              }
-            },
-            {
-              "Identifier": "Disconnect",
-              "Type": "DisconnectParticipant",
-              "Parameters": {},
-              "Transitions": {}
-            }
-          ]
-        }
-
-  # --- Lex V2 Bot (auto-provisioned with Nova Sonic S2S) ---
-
-  FlareLexRole:
-    Type: AWS::IAM::Role
-    Condition: VoiceEnabled
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lexv2.amazonaws.com
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: FlareLexPolly
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action:
-                  - polly:SynthesizeSpeech
-                Resource: "*"
-
-  FlareBot:
-    Type: AWS::Lex::Bot
-    Condition: VoiceEnabled
-    Properties:
-      Name: !Sub "FlareCommander-${AWS::StackName}"
-      Description: Voice incident commander for Flare
-      RoleArn: !GetAtt FlareLexRole.Arn
-      IdleSessionTTLInSeconds: 300
-      AutoBuildBotLocales: true
-      DataPrivacy:
-        ChildDirected: false
-      BotLocales:
-        - LocaleId: en_US
-          NluConfidenceThreshold: 0.4
-          VoiceSettings:
-            VoiceId: Matthew
-            Engine: generative
-          UnifiedSpeechSettings:
-            SpeechFoundationModel:
-              ModelArn: !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.nova-2-sonic-v1:0"
-              VoiceId: matthew
-          Intents:
-            - Name: CheckMetrics
-              Description: Check CloudWatch metrics for a resource
-              SampleUtterances:
-                - Utterance: "Check the metrics for {resource}"
-                - Utterance: "What are the error rates"
-                - Utterance: "How is the CPU looking on {resource}"
-                - Utterance: "Show me the connection count for {resource}"
-                - Utterance: "What is the latency on {resource}"
-                - Utterance: "Does {resource} look overwhelmed"
-                - Utterance: "Are there any metric spikes"
-                - Utterance: "Check {metric} for {resource}"
-                - Utterance: "How is {resource} performing"
-                - Utterance: "What do the metrics show"
-                - Utterance: "Pull up the {metric} data"
-                - Utterance: "Is {resource} under heavy load"
-              Slots:
-                - Name: resource
-                  SlotTypeName: AMAZON.AlphaNumeric
-                  ValueElicitationSetting:
-                    SlotConstraint: Optional
-                    PromptSpecification:
-                      MaxRetries: 1
-                      MessageGroupsList:
-                        - Message:
-                            PlainTextMessage:
-                              Value: "Which resource should I check?"
-                - Name: metric
-                  SlotTypeName: AMAZON.AlphaNumeric
-                  ValueElicitationSetting:
-                    SlotConstraint: Optional
-                    PromptSpecification:
-                      MaxRetries: 1
-                      MessageGroupsList:
-                        - Message:
-                            PlainTextMessage:
-                              Value: "Which metric?"
-              FulfillmentCodeHook:
-                Enabled: true
-            - Name: CheckLogs
-              Description: Search CloudWatch Logs for errors
-              SampleUtterances:
-                - Utterance: "Show me recent logs for {service}"
-                - Utterance: "Any errors in the logs"
-                - Utterance: "What do the {service} logs show"
-                - Utterance: "Pull up the logs for {service}"
-                - Utterance: "Are there error logs"
-                - Utterance: "What errors are showing up"
-                - Utterance: "Show me what is in the logs"
-                - Utterance: "Any connection errors in the logs"
-                - Utterance: "What is the log output for {service}"
-                - Utterance: "Check the logs"
-              Slots:
-                - Name: service
-                  SlotTypeName: AMAZON.AlphaNumeric
-                  ValueElicitationSetting:
-                    SlotConstraint: Optional
-                    PromptSpecification:
-                      MaxRetries: 1
-                      MessageGroupsList:
-                        - Message:
-                            PlainTextMessage:
-                              Value: "Which service's logs?"
-              FulfillmentCodeHook:
-                Enabled: true
-            - Name: CheckStatus
-              Description: Check health status of an AWS resource
-              SampleUtterances:
-                - Utterance: "Is {resource} healthy"
-                - Utterance: "What is the status of {resource}"
-                - Utterance: "Is {resource} running"
-                - Utterance: "Check if {resource} is up"
-                - Utterance: "How is {resource} doing"
-                - Utterance: "What is the health of {resource}"
-                - Utterance: "Is {resource} responding"
-                - Utterance: "Check the status"
-              Slots:
-                - Name: resource
-                  SlotTypeName: AMAZON.AlphaNumeric
-                  ValueElicitationSetting:
-                    SlotConstraint: Optional
-                    PromptSpecification:
-                      MaxRetries: 1
-                      MessageGroupsList:
-                        - Message:
-                            PlainTextMessage:
-                              Value: "Which resource?"
-              FulfillmentCodeHook:
-                Enabled: true
-            - Name: Summarize
-              Description: Summarize the incident investigation so far
-              SampleUtterances:
-                - Utterance: "Give me a summary"
-                - Utterance: "What do we know so far"
-                - Utterance: "Summarize the situation"
-                - Utterance: "What is the current status"
-                - Utterance: "Walk me through what happened"
-                - Utterance: "Recap the incident"
-                - Utterance: "What is the big picture"
-                - Utterance: "Give me the rundown"
-              FulfillmentCodeHook:
-                Enabled: true
-            - Name: FallbackIntent
-              Description: Catch-all for unmatched questions
-              ParentIntentSignature: "AMAZON.FallbackIntent"
-              FulfillmentCodeHook:
-                Enabled: true
-
-  FlareBotVersion:
-    Type: AWS::Lex::BotVersion
-    Condition: VoiceEnabled
-    Properties:
-      BotId: !GetAtt FlareBot.Id
-      BotVersionLocaleSpecification:
-        - LocaleId: en_US
-          BotVersionLocaleDetails:
-            SourceBotVersion: DRAFT
-
-  FlareBotAlias:
-    Type: AWS::Lex::BotAlias
-    Condition: VoiceEnabled
-    Properties:
-      BotId: !GetAtt FlareBot.Id
-      BotAliasName: live
-      BotVersion: !GetAtt FlareBotVersion.BotVersion
-      BotAliasLocaleSettings:
-        - LocaleId: en_US
-          BotAliasLocaleSetting:
-            Enabled: true
-            CodeHookSpecification:
-              LambdaCodeHook:
-                CodeHookInterfaceVersion: "1.0"
-                LambdaARN: !GetAtt FlareVoiceHandlerFunction.Arn
+          INCIDENTS_TABLE_NAME: !Sub "flare-incidents-${AWS::StackName}"
+          CONNECT_CONFIG_PARAM: !Sub "/flare/${AWS::StackName}/connect-config"
 
   # --- Schedule Trigger ---
 
@@ -770,28 +333,3 @@ Outputs:
       - Schedule: !Ref EnableSchedule
         Alarm: !Ref EnableAlarmTrigger
         Subscription: !Ref EnableSubscription
-
-  FlareIncidentsTableName:
-    Condition: VoiceEnabled
-    Description: DynamoDB table for incident state
-    Value: !Ref FlareIncidentsTable
-
-  FlareVoiceHandlerArn:
-    Condition: VoiceEnabled
-    Description: Voice handler Lambda ARN
-    Value: !GetAtt FlareVoiceHandlerFunction.Arn
-
-  FlareConnectInstanceId:
-    Condition: VoiceEnabled
-    Description: Amazon Connect instance ID
-    Value: !GetAtt FlareConnectInstance.Id
-
-  FlarePhoneNumberAddress:
-    Condition: VoiceEnabled
-    Description: Claimed phone number (E.164)
-    Value: !GetAtt FlarePhoneNumber.Address
-
-  FlareBotId:
-    Condition: VoiceEnabled
-    Description: Lex V2 bot ID
-    Value: !GetAtt FlareBot.Id
