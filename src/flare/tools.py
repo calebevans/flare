@@ -39,11 +39,11 @@ def query_metrics(
         response = cloudwatch_client.get_metric_statistics(
             Namespace=namespace,
             MetricName=metric_name,
-            Dimensions=cast(Any, cw_dimensions),
+            Dimensions=cast("Any", cw_dimensions),
             StartTime=start_time,
             EndTime=end_time,
             Period=max(period_minutes * 60 // 10, 60),
-            Statistics=cast(Any, [stat]),
+            Statistics=cast("Any", [stat]),
         )
         datapoints = sorted(
             response.get("Datapoints", []),

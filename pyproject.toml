@@ -22,7 +22,7 @@ dev = [
     "mypy",
     "boto3-stubs[logs,sns,bedrock-runtime,dynamodb,connect,cloudwatch]",
     "types-tqdm",
-    "ruff",
+    "ruff>=0.15",
     "pre-commit",
 ]
 
