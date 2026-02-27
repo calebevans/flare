@@ -15,6 +15,12 @@ def resolve_log_groups(
     *,
     logs_client: CloudWatchLogsClient | None = None,
 ) -> list[str]:
+    """Expand log group patterns into concrete log group names.
+
+    Patterns ending with ``*`` are treated as prefixes and resolved via
+    ``describe_log_groups`` with pagination.  Exact names are passed
+    through as-is.  Results are deduplicated and returned sorted.
+    """
     if logs_client is None:
         logs_client = boto3.client("logs")
 
@@ -49,6 +55,12 @@ def fetch_logs(
     *,
     logs_client: CloudWatchLogsClient | None = None,
 ) -> str:
+    """Fetch log events from a CloudWatch log group within a time window.
+
+    Returns all events from the last ``lookback_minutes`` as a single
+    string with one ``ISO-timestamp message`` per line.  Paginates
+    automatically to retrieve the full result set.
+    """
     if logs_client is None:
         logs_client = boto3.client("logs")
 
