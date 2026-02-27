@@ -1,0 +1,21 @@
+Given the following incident analysis, identify the CloudWatch metrics and
+log queries an on-call engineer would most likely investigate next.
+
+Return ONLY valid JSON with this schema:
+{
+  "metrics": [
+    {"query_key": "human-readable label", "namespace": "AWS/RDS", "metric_name": "DatabaseConnections",
+     "dimensions": {"DBInstanceIdentifier": "auth-db"}, "stat": "Average", "period_minutes": 60}
+  ],
+  "log_queries": [
+    {"query_key": "human-readable label", "log_group": "/aws/lambda/auth-service",
+     "filter_pattern": "ERROR connection", "lookback_minutes": 60}
+  ],
+  "status_checks": [
+    {"query_key": "human-readable label", "resource_type": "rds", "resource_id": "auth-db"}
+  ]
+}
+
+Limit to 8 total queries. Focus on resources and metrics mentioned in the
+analysis, plus 1-2 "adjacent" resources that could be related.
+Use only real AWS CloudWatch namespace and metric names.
