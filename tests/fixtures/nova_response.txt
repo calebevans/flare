@@ -1,0 +1,8 @@
+SEVERITY: High
+ROOT CAUSE: The primary database (db-primary.internal:5432) became unreachable, triggering an automatic failover to a read replica. Write operations failed because the replica is read-only.
+AFFECTED COMPONENTS: db-primary.internal, db-replica.internal, order processing pipeline
+EVIDENCE: Connection refused to db-primary.internal:5432 (3 attempts), Failover initiated, Write operation failed: ReadOnlyError, Transaction rollback: order_id=ORD-98765
+NEXT STEPS:
+1. Check db-primary.internal health: verify the RDS/EC2 instance status, disk space, and network connectivity
+2. If primary is unrecoverable, promote the read replica to primary using RDS failover or manual promotion
+3. Review order ORD-98765 and any other transactions that were rolled back during the read-only window for reprocessing
