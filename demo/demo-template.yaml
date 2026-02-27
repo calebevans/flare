@@ -1,0 +1,73 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Demo resources for Flare - creates a failing Lambda for testing
+
+Parameters:
+  FailureMode:
+    Type: String
+    Default: mixed
+    AllowedValues:
+      - exception
+      - oom
+      - timeout
+      - mixed
+    Description: How the demo Lambda should fail
+
+Resources:
+
+  DemoFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  DemoFailingFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: flare-demo-failing
+      Runtime: python3.12
+      Handler: handler.handler
+      Role: !GetAtt DemoFunctionRole.Arn
+      MemorySize: 128
+      Timeout: 30
+      Code:
+        ZipFile: |
+          import json, os, logging
+
+          def handler(event, context):
+              mode = event.get("mode", os.environ.get("FAILURE_MODE", "exception"))
+              logger = logging.getLogger()
+
+              if mode == "exception":
+                  raise RuntimeError("Unhandled exception in payment processing: NoneType has no attribute 'charge_id'")
+
+              if mode == "mixed":
+                  for i in range(50):
+                      logger.info(f"Processing batch {i}: status=ok records=1024")
+                  for i in range(5):
+                      logger.error(f"Connection refused to db-primary.internal:5432 attempt={i}")
+                  logger.warning("Falling back to read replica db-replica.internal:5432")
+                  for i in range(20):
+                      logger.info(f"Processing batch {50 + i}: status=ok records=1024")
+                  raise ConnectionError("Lost connection to db-primary.internal:5432")
+
+              return {"statusCode": 200, "body": json.dumps({"mode": mode})}
+      Environment:
+        Variables:
+          FAILURE_MODE: !Ref FailureMode
+
+Outputs:
+  DemoFunctionName:
+    Description: Name of the demo failing Lambda
+    Value: !Ref DemoFailingFunction
+
+  DemoLogGroup:
+    Description: Log group to monitor with Flare
+    Value: !Sub "/aws/lambda/${DemoFailingFunction}"
