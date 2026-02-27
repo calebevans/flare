@@ -1,0 +1,476 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Flare - AI-powered log triage for AWS using Cordon and Amazon Nova
+
+Parameters:
+
+  # --- Required ---
+
+  LogGroupPatterns:
+    Type: CommaDelimitedList
+    Description: >
+      Log group names or prefix patterns (comma-separated).
+      Use trailing * for prefix matching: /aws/lambda/* watches all Lambda functions.
+      Exact names work too: /my-app/api-server
+
+  NotificationEmail:
+    Type: String
+    Description: Email address for SNS alert notifications
+
+  # --- Container ---
+
+  EcrImageUri:
+    Type: String
+    Default: public.ecr.aws/flare:latest
+    Description: Container image URI (default uses the published public ECR image)
+
+  # --- Triggers (enable any combination) ---
+
+  EnableSchedule:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Enable periodic scheduled scans of all configured log groups
+
+  ScheduleExpression:
+    Type: String
+    Default: "rate(1 hour)"
+    Description: EventBridge schedule expression (when EnableSchedule is true)
+
+  EnableAlarmTrigger:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Trigger analysis when specific CloudWatch Alarms enter ALARM state
+
+  AlarmNamePrefix:
+    Type: String
+    Default: ""
+    Description: >
+      Only react to alarms whose name starts with this prefix.
+      Leave empty to match all alarms (not recommended).
+
+  EnableSubscription:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Attach a CloudWatch Logs subscription filter for real-time triggering
+
+  SubscriptionLogGroup:
+    Type: String
+    Default: ""
+    Description: Log group for the subscription filter (defaults to first in LogGroupPatterns)
+
+  SubscriptionFilterPattern:
+    Type: String
+    Default: "?ERROR ?FATAL ?CRITICAL"
+    Description: CloudWatch Logs filter pattern for the subscription filter
+
+  # --- Analysis ---
+
+  LookbackMinutes:
+    Type: Number
+    Default: 30
+    MinValue: 1
+    MaxValue: 1440
+    Description: Minutes of logs to pull when triggered
+
+  TokenBudget:
+    Type: Number
+    Default: 0
+    Description: Max input tokens for analysis (0 = use model context window)
+
+  CordonWindowSize:
+    Type: Number
+    Default: 4
+    MinValue: 2
+    MaxValue: 50
+
+  CordonKNeighbors:
+    Type: Number
+    Default: 5
+    MinValue: 1
+    MaxValue: 50
+
+  BedrockRegion:
+    Type: String
+    Default: us-east-1
+
+  # --- Lambda tuning ---
+
+  LambdaMemoryMB:
+    Type: Number
+    Default: 1024
+    MinValue: 512
+    MaxValue: 10240
+
+  LambdaTimeoutSeconds:
+    Type: Number
+    Default: 300
+    MinValue: 60
+    MaxValue: 900
+
+  # --- Voice / Connect (optional) ---
+
+  ConnectEnabled:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Enable outbound voice calling via Amazon Connect
+
+  ConnectInstanceId:
+    Type: String
+    Default: ""
+    Description: Amazon Connect instance ID
+
+  ConnectContactFlowId:
+    Type: String
+    Default: ""
+    Description: Contact flow ID for outbound calls
+
+  ConnectPhoneNumber:
+    Type: String
+    Default: ""
+    Description: Claimed phone number (E.164 format) used as caller ID
+
+  OncallPhone:
+    Type: String
+    Default: ""
+    Description: On-call engineer phone number (E.164 format)
+
+Conditions:
+  ScheduleEnabled: !Equals [!Ref EnableSchedule, "true"]
+  AlarmEnabled: !Equals [!Ref EnableAlarmTrigger, "true"]
+  AlarmPrefixProvided: !Not [!Equals [!Ref AlarmNamePrefix, ""]]
+  SubscriptionEnabled: !Equals [!Ref EnableSubscription, "true"]
+  SubscriptionLogGroupProvided: !Not [!Equals [!Ref SubscriptionLogGroup, ""]]
+  VoiceEnabled: !Equals [!Ref ConnectEnabled, "true"]
+
+Resources:
+
+  # --- SNS ---
+
+  FlareSNSTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "flare-alerts-${AWS::StackName}"
+
+  FlareEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref FlareSNSTopic
+      Protocol: email
+      Endpoint: !Ref NotificationEmail
+
+  # --- DynamoDB (voice pipeline state) ---
+
+  FlareIncidentsTable:
+    Type: AWS::DynamoDB::Table
+    Condition: VoiceEnabled
+    Properties:
+      TableName: !Sub "flare-incidents-${AWS::StackName}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: incident_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: incident_id
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  # --- IAM ---
+
+  FlareFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: FlareCloudWatchLogsRead
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:DescribeLogGroups
+                  - logs:FilterLogEvents
+                  - logs:GetLogEvents
+                  - logs:DescribeLogStreams
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:*"
+        - PolicyName: FlareBedrockInvoke
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                Resource:
+                  - !Sub "arn:aws:bedrock:${BedrockRegion}::foundation-model/amazon.nova-*"
+                  - !Sub "arn:aws:bedrock:us.*::foundation-model/amazon.nova-*"
+        - PolicyName: FlareSNSPublish
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sns:Publish
+                Resource: !Ref FlareSNSTopic
+        - !If
+          - VoiceEnabled
+          - PolicyName: FlareDynamoDBWrite
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:PutItem
+                    - dynamodb:UpdateItem
+                  Resource: !GetAtt FlareIncidentsTable.Arn
+          - !Ref AWS::NoValue
+        - !If
+          - VoiceEnabled
+          - PolicyName: FlareConnectOutbound
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - connect:StartOutboundVoiceContact
+                  Resource: !Sub "arn:aws:connect:${AWS::Region}:${AWS::AccountId}:instance/*/contact/*"
+          - !Ref AWS::NoValue
+
+  FlareVoiceHandlerRole:
+    Type: AWS::IAM::Role
+    Condition: VoiceEnabled
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: VoiceDynamoDBRead
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                Resource: !GetAtt FlareIncidentsTable.Arn
+        - PolicyName: VoiceCloudWatchRead
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:DescribeLogGroups
+                  - logs:FilterLogEvents
+                  - logs:GetLogEvents
+                  - logs:DescribeLogStreams
+                  - cloudwatch:GetMetricStatistics
+                  - cloudwatch:ListMetrics
+                  - ec2:DescribeInstanceStatus
+                  - ecs:DescribeServices
+                  - rds:DescribeDBInstances
+                  - lambda:GetFunction
+                Resource: "*"
+        - PolicyName: VoiceBedrockInvoke
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                Resource:
+                  - !Sub "arn:aws:bedrock:${BedrockRegion}::foundation-model/amazon.nova-*"
+                  - !Sub "arn:aws:bedrock:us.*::foundation-model/amazon.nova-*"
+
+  # --- Lambda ---
+
+  FlareFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "flare-${AWS::StackName}"
+      PackageType: Image
+      Code:
+        ImageUri: !Ref EcrImageUri
+      Role: !GetAtt FlareFunctionRole.Arn
+      MemorySize: !Ref LambdaMemoryMB
+      Timeout: !Ref LambdaTimeoutSeconds
+      Environment:
+        Variables:
+          LOG_GROUP_PATTERNS: !Join [",", !Ref LogGroupPatterns]
+          SNS_TOPIC_ARN: !Ref FlareSNSTopic
+          LOOKBACK_MINUTES: !Ref LookbackMinutes
+          BEDROCK_REGION: !Ref BedrockRegion
+          CORDON_WINDOW_SIZE: !Ref CordonWindowSize
+          CORDON_K_NEIGHBORS: !Ref CordonKNeighbors
+          TOKEN_BUDGET: !Ref TokenBudget
+          CONNECT_ENABLED: !Ref ConnectEnabled
+          CONNECT_INSTANCE_ID: !Ref ConnectInstanceId
+          CONNECT_CONTACT_FLOW_ID: !Ref ConnectContactFlowId
+          CONNECT_PHONE_NUMBER: !Ref ConnectPhoneNumber
+          ONCALL_PHONE: !Ref OncallPhone
+          INCIDENTS_TABLE_NAME: !If
+            - VoiceEnabled
+            - !Ref FlareIncidentsTable
+            - ""
+
+  # --- Voice Handler Lambda (Connect briefing + Lex fulfillment) ---
+
+  FlareVoiceHandlerFunction:
+    Type: AWS::Lambda::Function
+    Condition: VoiceEnabled
+    Properties:
+      FunctionName: !Sub "flare-voice-${AWS::StackName}"
+      PackageType: Image
+      Code:
+        ImageUri: !Ref EcrImageUri
+      Role: !GetAtt FlareVoiceHandlerRole.Arn
+      MemorySize: 512
+      Timeout: 10
+      Environment:
+        Variables:
+          LOG_GROUP_PATTERNS: !Join [",", !Ref LogGroupPatterns]
+          SNS_TOPIC_ARN: !Ref FlareSNSTopic
+          BEDROCK_REGION: !Ref BedrockRegion
+          INCIDENTS_TABLE_NAME: !Ref FlareIncidentsTable
+
+  FlareVoiceHandlerConnectPermission:
+    Type: AWS::Lambda::Permission
+    Condition: VoiceEnabled
+    Properties:
+      FunctionName: !Ref FlareVoiceHandlerFunction
+      Action: lambda:InvokeFunction
+      Principal: connect.amazonaws.com
+
+  FlareVoiceHandlerLexPermission:
+    Type: AWS::Lambda::Permission
+    Condition: VoiceEnabled
+    Properties:
+      FunctionName: !Ref FlareVoiceHandlerFunction
+      Action: lambda:InvokeFunction
+      Principal: lex.amazonaws.com
+
+  # --- Schedule Trigger ---
+
+  FlareScheduleRule:
+    Type: AWS::Events::Rule
+    Condition: ScheduleEnabled
+    Properties:
+      ScheduleExpression: !Ref ScheduleExpression
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt FlareFunction.Arn
+          Id: FlareScheduleTarget
+
+  FlareSchedulePermission:
+    Type: AWS::Lambda::Permission
+    Condition: ScheduleEnabled
+    Properties:
+      FunctionName: !Ref FlareFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt FlareScheduleRule.Arn
+
+  # --- Alarm Trigger ---
+
+  FlareAlarmRule:
+    Type: AWS::Events::Rule
+    Condition: AlarmEnabled
+    Properties:
+      EventPattern: !If
+        - AlarmPrefixProvided
+        - source:
+            - aws.cloudwatch
+          detail-type:
+            - "CloudWatch Alarm State Change"
+          detail:
+            alarmName:
+              - prefix: !Ref AlarmNamePrefix
+            state:
+              value:
+                - ALARM
+        - source:
+            - aws.cloudwatch
+          detail-type:
+            - "CloudWatch Alarm State Change"
+          detail:
+            state:
+              value:
+                - ALARM
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt FlareFunction.Arn
+          Id: FlareAlarmTarget
+
+  FlareAlarmPermission:
+    Type: AWS::Lambda::Permission
+    Condition: AlarmEnabled
+    Properties:
+      FunctionName: !Ref FlareFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt FlareAlarmRule.Arn
+
+  # --- Subscription Filter Trigger ---
+
+  FlareSubscriptionPermission:
+    Type: AWS::Lambda::Permission
+    Condition: SubscriptionEnabled
+    Properties:
+      FunctionName: !Ref FlareFunction
+      Action: lambda:InvokeFunction
+      Principal: !Sub "logs.${AWS::Region}.amazonaws.com"
+
+  FlareSubscriptionFilter:
+    Type: AWS::Logs::SubscriptionFilter
+    Condition: SubscriptionEnabled
+    DependsOn: FlareSubscriptionPermission
+    Properties:
+      LogGroupName: !If
+        - SubscriptionLogGroupProvided
+        - !Ref SubscriptionLogGroup
+        - !Select [0, !Ref LogGroupPatterns]
+      FilterPattern: !Ref SubscriptionFilterPattern
+      DestinationArn: !GetAtt FlareFunction.Arn
+
+Outputs:
+  FlareFunctionArn:
+    Description: Flare Lambda function ARN
+    Value: !GetAtt FlareFunction.Arn
+
+  FlareSNSTopicArn:
+    Description: SNS topic ARN for Flare alerts
+    Value: !Ref FlareSNSTopic
+
+  ActiveTriggers:
+    Description: Which trigger modes are enabled
+    Value: !Sub
+      - "schedule=${Schedule}, alarm=${Alarm}, subscription=${Subscription}"
+      - Schedule: !Ref EnableSchedule
+        Alarm: !Ref EnableAlarmTrigger
+        Subscription: !Ref EnableSubscription
+
+  FlareIncidentsTableName:
+    Condition: VoiceEnabled
+    Description: DynamoDB table for incident state
+    Value: !Ref FlareIncidentsTable
+
+  FlareVoiceHandlerArn:
+    Condition: VoiceEnabled
+    Description: Voice handler Lambda ARN (for Connect and Lex configuration)
+    Value: !GetAtt FlareVoiceHandlerFunction.Arn
