@@ -1,0 +1,44 @@
+{
+  "version": "0",
+  "id": "abcd1234-ef56-7890-abcd-ef1234567890",
+  "detail-type": "CloudWatch Alarm State Change",
+  "source": "aws.cloudwatch",
+  "account": "123456789012",
+  "time": "2026-02-26T12:00:00Z",
+  "region": "us-east-1",
+  "resources": [
+    "arn:aws:cloudwatch:us-east-1:123456789012:alarm:HighCPU-WebServer"
+  ],
+  "detail": {
+    "alarmName": "HighCPU-WebServer",
+    "state": {
+      "value": "ALARM",
+      "reason": "Threshold Crossed: 1 out of the last 1 datapoints [92.5 (26/02/26 11:55:00)] was greater than or equal to the threshold (80.0).",
+      "reasonData": "{\"version\":\"1.0\",\"queryDate\":\"2026-02-26T12:00:00.000+0000\",\"startDate\":\"2026-02-26T11:55:00.000+0000\",\"statistic\":\"Average\",\"period\":300,\"recentDatapoints\":[92.5],\"threshold\":80.0,\"evaluatedDatapoints\":[{\"timestamp\":\"2026-02-26T11:55:00.000+0000\",\"sampleCount\":5.0,\"value\":92.5}]}",
+      "timestamp": "2026-02-26T12:00:00.000+0000"
+    },
+    "previousState": {
+      "value": "OK",
+      "reason": "Threshold Crossed: 1 out of the last 1 datapoints [45.2 (26/02/26 11:50:00)] was not greater than or equal to the threshold (80.0).",
+      "timestamp": "2026-02-26T11:55:00.000+0000"
+    },
+    "configuration": {
+      "metrics": [
+        {
+          "id": "m1",
+          "metricStat": {
+            "metric": {
+              "namespace": "AWS/EC2",
+              "name": "CPUUtilization",
+              "dimensions": {
+                "InstanceId": "i-0abcdef1234567890"
+              }
+            },
+            "period": 300,
+            "stat": "Average"
+          }
+        }
+      ]
+    }
+  }
+}
