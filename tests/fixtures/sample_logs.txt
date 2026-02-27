@@ -1,0 +1,65 @@
+2026-02-26T10:00:00+00:00 START RequestId: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+2026-02-26T10:00:00+00:00 INFO Initializing connection pool: host=db-primary.internal port=5432 pool_size=10
+2026-02-26T10:00:00+00:00 INFO Connection pool established successfully
+2026-02-26T10:00:01+00:00 INFO Processing batch 0: status=ok records=1024 duration_ms=234
+2026-02-26T10:00:01+00:00 INFO Processing batch 1: status=ok records=1024 duration_ms=198
+2026-02-26T10:00:02+00:00 INFO Processing batch 2: status=ok records=1024 duration_ms=212
+2026-02-26T10:00:02+00:00 INFO Processing batch 3: status=ok records=1024 duration_ms=245
+2026-02-26T10:00:03+00:00 INFO Processing batch 4: status=ok records=1024 duration_ms=201
+2026-02-26T10:00:03+00:00 INFO Processing batch 5: status=ok records=1024 duration_ms=189
+2026-02-26T10:00:04+00:00 INFO Processing batch 6: status=ok records=1024 duration_ms=223
+2026-02-26T10:00:04+00:00 INFO Processing batch 7: status=ok records=1024 duration_ms=267
+2026-02-26T10:00:05+00:00 INFO Processing batch 8: status=ok records=1024 duration_ms=234
+2026-02-26T10:00:05+00:00 INFO Processing batch 9: status=ok records=1024 duration_ms=198
+2026-02-26T10:00:06+00:00 INFO Processing batch 10: status=ok records=1024 duration_ms=212
+2026-02-26T10:00:06+00:00 INFO Processing batch 11: status=ok records=1024 duration_ms=189
+2026-02-26T10:00:07+00:00 INFO Processing batch 12: status=ok records=1024 duration_ms=245
+2026-02-26T10:00:07+00:00 INFO Processing batch 13: status=ok records=1024 duration_ms=201
+2026-02-26T10:00:08+00:00 INFO Processing batch 14: status=ok records=1024 duration_ms=223
+2026-02-26T10:00:08+00:00 INFO Processing batch 15: status=ok records=1024 duration_ms=234
+2026-02-26T10:00:09+00:00 INFO Processing batch 16: status=ok records=1024 duration_ms=198
+2026-02-26T10:00:09+00:00 INFO Processing batch 17: status=ok records=1024 duration_ms=212
+2026-02-26T10:00:10+00:00 INFO Processing batch 18: status=ok records=1024 duration_ms=267
+2026-02-26T10:00:10+00:00 INFO Processing batch 19: status=ok records=1024 duration_ms=189
+2026-02-26T10:00:11+00:00 INFO Processing batch 20: status=ok records=1024 duration_ms=234
+2026-02-26T10:00:11+00:00 INFO Processing batch 21: status=ok records=1024 duration_ms=201
+2026-02-26T10:00:12+00:00 INFO Processing batch 22: status=ok records=1024 duration_ms=223
+2026-02-26T10:00:12+00:00 INFO Processing batch 23: status=ok records=1024 duration_ms=198
+2026-02-26T10:00:13+00:00 WARN Connection latency spike: host=db-primary.internal latency_ms=1245
+2026-02-26T10:00:13+00:00 ERROR Connection refused to db-primary.internal:5432 attempt=1
+2026-02-26T10:00:14+00:00 ERROR Connection refused to db-primary.internal:5432 attempt=2
+2026-02-26T10:00:14+00:00 ERROR Connection refused to db-primary.internal:5432 attempt=3
+2026-02-26T10:00:15+00:00 WARN Failover initiated: switching from db-primary to db-replica.internal:5432
+2026-02-26T10:00:15+00:00 INFO Connection pool re-established on db-replica.internal
+2026-02-26T10:00:16+00:00 WARN Running in read-only mode: writes will fail until primary recovers
+2026-02-26T10:00:16+00:00 INFO Processing batch 24: status=ok records=1024 duration_ms=345
+2026-02-26T10:00:17+00:00 INFO Processing batch 25: status=ok records=1024 duration_ms=312
+2026-02-26T10:00:17+00:00 INFO Processing batch 26: status=ok records=1024 duration_ms=298
+2026-02-26T10:00:18+00:00 INFO Processing batch 27: status=ok records=1024 duration_ms=334
+2026-02-26T10:00:18+00:00 INFO Processing batch 28: status=ok records=1024 duration_ms=289
+2026-02-26T10:00:19+00:00 INFO Processing batch 29: status=ok records=1024 duration_ms=312
+2026-02-26T10:00:19+00:00 INFO Processing batch 30: status=ok records=1024 duration_ms=345
+2026-02-26T10:00:20+00:00 INFO Processing batch 31: status=ok records=1024 duration_ms=298
+2026-02-26T10:00:20+00:00 INFO Processing batch 32: status=ok records=1024 duration_ms=267
+2026-02-26T10:00:21+00:00 INFO Processing batch 33: status=ok records=1024 duration_ms=312
+2026-02-26T10:00:21+00:00 INFO Processing batch 34: status=ok records=1024 duration_ms=289
+2026-02-26T10:00:22+00:00 INFO Processing batch 35: status=ok records=1024 duration_ms=234
+2026-02-26T10:00:22+00:00 INFO Processing batch 36: status=ok records=1024 duration_ms=298
+2026-02-26T10:00:23+00:00 INFO Processing batch 37: status=ok records=1024 duration_ms=312
+2026-02-26T10:00:23+00:00 ERROR Write operation failed: ReadOnlyError on db-replica.internal
+2026-02-26T10:00:24+00:00 ERROR Write operation failed: ReadOnlyError on db-replica.internal
+2026-02-26T10:00:24+00:00 ERROR Transaction rollback: order_id=ORD-98765 reason=ReadOnlyError
+2026-02-26T10:00:25+00:00 INFO Processing batch 38: status=partial records=512 duration_ms=456
+2026-02-26T10:00:25+00:00 INFO Processing batch 39: status=ok records=1024 duration_ms=289
+2026-02-26T10:00:26+00:00 INFO Processing batch 40: status=ok records=1024 duration_ms=312
+2026-02-26T10:00:26+00:00 INFO Processing batch 41: status=ok records=1024 duration_ms=298
+2026-02-26T10:00:27+00:00 INFO Processing batch 42: status=ok records=1024 duration_ms=234
+2026-02-26T10:00:27+00:00 INFO Processing batch 43: status=ok records=1024 duration_ms=267
+2026-02-26T10:00:28+00:00 INFO Processing batch 44: status=ok records=1024 duration_ms=312
+2026-02-26T10:00:28+00:00 INFO Processing batch 45: status=ok records=1024 duration_ms=289
+2026-02-26T10:00:29+00:00 INFO Processing batch 46: status=ok records=1024 duration_ms=298
+2026-02-26T10:00:29+00:00 INFO Processing batch 47: status=ok records=1024 duration_ms=234
+2026-02-26T10:00:30+00:00 INFO Processing batch 48: status=ok records=1024 duration_ms=312
+2026-02-26T10:00:30+00:00 INFO Processing batch 49: status=ok records=1024 duration_ms=267
+2026-02-26T10:00:31+00:00 END RequestId: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+2026-02-26T10:00:31+00:00 REPORT RequestId: a1b2c3d4-e5f6-7890-abcd-ef1234567890 Duration: 31234.56 ms Billed Duration: 31235 ms Memory Size: 256 MB Max Memory Used: 178 MB
