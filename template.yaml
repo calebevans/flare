@@ -21,8 +21,8 @@ Parameters:
 
   EcrImageUri:
     Type: String
-    Default: public.ecr.aws/c3f3p2f6/flare:latest
-    Description: Container image URI (default uses the published public ECR image)
+    Default: 019107478361.dkr.ecr.us-east-1.amazonaws.com/flare:latest
+    Description: Container image URI (private ECR)
 
   # --- Triggers (enable any combination) ---
 

@@ -11,8 +11,8 @@ Parameters:
 
   EcrImageUri:
     Type: String
-    Default: public.ecr.aws/c3f3p2f6/flare:latest
-    Description: Container image URI (must match the base stack)
+    Default: 019107478361.dkr.ecr.us-east-1.amazonaws.com/flare:latest
+    Description: Container image URI (private ECR, must match the base stack)
 
   OncallPhone:
     Type: String
@@ -111,6 +111,9 @@ Resources:
       PackageType: Image
       Code:
         ImageUri: !Ref EcrImageUri
+      ImageConfig:
+        Command:
+          - "flare.voice_handler.voice_dispatch"
       Role: !GetAtt FlareVoiceHandlerRole.Arn
       MemorySize: 1024
       Timeout: 30

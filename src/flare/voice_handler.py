@@ -34,6 +34,19 @@ def _get_config() -> FlareConfig:
 # ---------------------------------------------------------------------------
 
 
+def voice_dispatch(event: dict[str, Any], context: Any) -> dict[str, Any]:
+    """Route incoming events to the appropriate handler.
+
+    Connect contact flow events contain ``Details.ContactData``.
+    Lex fulfillment events contain ``sessionState``.
+    """
+    if "Details" in event and "ContactData" in event.get("Details", {}):
+        return briefing_handler(event, context)
+    if "sessionState" in event:
+        return fulfillment_handler(event, context)
+    return {"statusCode": 400, "body": "Unknown event type"}
+
+
 def briefing_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     """Connect contact flow handler: read the RCA from DynamoDB for Polly.
 
