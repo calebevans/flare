@@ -25,7 +25,7 @@ ONCALL_PHONE         ?=
 CONNECT_INSTANCE_ID  ?=
 
 # Container image (default :latest; override to pin version)
-ECR_IMAGE_URI ?= 019107478361.dkr.ecr.us-east-1.amazonaws.com/flare:v0.1.8
+ECR_IMAGE_URI ?= 019107478361.dkr.ecr.us-east-1.amazonaws.com/flare:v0.1.9
 
 define check_param
 $(if $($(1)),,$(error $(1) is required. Usage: make deploy $(1)=<value>))
