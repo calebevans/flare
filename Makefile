@@ -26,7 +26,7 @@ ONCALL_PHONE         ?=
 CONNECT_INSTANCE_ID  ?=
 
 # Container image (default :latest; override to pin version)
-ECR_IMAGE_URI ?= 019107478361.dkr.ecr.us-east-1.amazonaws.com/flare:v0.1.12
+ECR_IMAGE_URI ?= 019107478361.dkr.ecr.us-east-1.amazonaws.com/flare:v0.1.13
 
 # Container runtime (docker, podman, etc.)
 CONTAINER_RT ?= $(shell command -v podman 2>/dev/null || command -v docker 2>/dev/null)

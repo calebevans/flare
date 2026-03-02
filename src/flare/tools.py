@@ -266,6 +266,18 @@ def _check_ec2_status(instance_id: str) -> dict[str, Any]:
 _SAFE_PREFIXES = ("describe_", "get_", "list_")
 
 
+def _to_snake_case(name: str) -> str:
+    """Convert PascalCase or camelCase to snake_case.
+
+    Already-snake_case input passes through unchanged.
+    """
+    import re
+
+    name = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", name)
+    name = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", name)
+    return name.lower()
+
+
 def describe_resource(
     service: str,
     operation: str,
@@ -277,7 +289,7 @@ def describe_resource(
     are allowed.  Returns the raw API response as a dict, truncated to
     the first 20 items per list to keep the payload voice-friendly.
     """
-    operation = operation.lower()
+    operation = _to_snake_case(operation)
     if not any(operation.startswith(p) for p in _SAFE_PREFIXES):
         return {
             "error": (

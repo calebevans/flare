@@ -373,13 +373,12 @@ def _smart_resource_lookup(
         'ONLY the JSON: {"use_cache": true}\n\n'
         "Otherwise, suggest ONE AWS API call to answer it. Respond "
         "with ONLY valid JSON:\n"
-        '{"service": "ec2", "operation": "describe_security_groups", '
-        '"params": {"Filters": [{"Name": "group-id", "Values": ["sg-123"]}]}}\n\n'
+        '{"service": "<aws_service>", "operation": "<snake_case_method>", '
+        '"params": {<optional_filters>}}\n\n'
         "Only use read-only operations (describe_*, get_*, list_*). "
         "Use snake_case for the operation name. "
-        "You have full read-only access to EC2, ECS, RDS, Lambda, "
-        "CloudWatch, VPC networking, security groups, CloudFormation, "
-        "and other AWS services."
+        "You have full read-only access to all AWS services. "
+        "Choose the API call that best answers the engineer's question."
     )
 
     try:

@@ -33,10 +33,9 @@ aloud over a phone call. Start by naming the affected resource and region
 so the listener has context, then describe what went wrong and the likely
 root cause. Do not include log lines, timestamps, error codes, or
 formatting. Speak as if calmly briefing a colleague who just woke up.
-Example tone: "Your Lambda function flare-demo-failing in us-east-1 is
-having trouble. It looks like the handler module is missing from the
-deployment package, so every invocation is crashing on startup. You'll
-want to check that the handler file is included in the build."]
+Example tone: "Your API service in us-east-1 is having trouble. It looks
+like requests are failing because a downstream dependency is unreachable.
+You'll want to check the network path and make sure the target is healthy."]
 
 If the logs look healthy with no actionable findings:
 
