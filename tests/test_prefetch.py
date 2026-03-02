@@ -68,7 +68,12 @@ def test_plan_handles_invalid_json(
     mocker.patch("litellm.completion", return_value=mock_resp)
 
     result = plan("STATUS: Low\nSUMMARY: ok", trigger, voice_config)
-    assert result == {"metrics": [], "log_queries": [], "status_checks": []}
+    assert result == {
+        "metrics": [],
+        "log_queries": [],
+        "status_checks": [],
+        "resource_lookups": [],
+    }
 
 
 def test_execute_runs_queries(
@@ -100,7 +105,7 @@ def test_execute_runs_queries(
 def test_execute_handles_empty_plan(voice_config: FlareConfig):
     empty_plan = {"metrics": [], "log_queries": [], "status_checks": []}
     result = execute(empty_plan, voice_config)
-    assert result == {"metrics": [], "logs": [], "status": []}
+    assert result == {"metrics": [], "logs": [], "status": [], "resources": []}
 
 
 def test_run_orchestrates_pipeline(
