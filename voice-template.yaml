@@ -274,7 +274,7 @@ Resources:
               "Identifier": "lexbot",
               "Type": "ConnectParticipantWithLexBot",
               "Parameters": {
-                "Text": "Hey, thanks for picking up. This is Flare, your incident commander. $.External.rca_summary. I am here to help you investigate. What would you like to know?",
+                "Text": "Hey, thanks for picking up. This is Flare, your triage assistant. $.External.rca_summary. I am here to help you investigate. What would you like to know?",
                 "LexV2Bot": {
                   "AliasArn": "${FlareBotAlias.Arn}"
                 },
@@ -328,8 +328,8 @@ Resources:
   FlareBot:
     Type: AWS::Lex::Bot
     Properties:
-      Name: !Sub "FlareCommander-${BaseStackName}"
-      Description: Voice incident commander for Flare
+      Name: !Sub "FlareTriage-${BaseStackName}"
+      Description: Voice triage assistant for Flare
       RoleArn: !GetAtt FlareLexRole.Arn
       IdleSessionTTLInSeconds: 300
       AutoBuildBotLocales: true

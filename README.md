@@ -1,6 +1,6 @@
 # Flare
 
-AI-powered log triage and voice-driven incident commander for AWS. Flare autonomously pulls CloudWatch logs, identifies semantically anomalous sections using [Cordon](https://github.com/calebevans/cordon), generates a root cause analysis, and calls the on-call engineer to walk them through it -- powered by three Amazon Nova foundation models on Bedrock.
+AI-powered log triage and voice-driven triage assistant for AWS. Flare autonomously pulls CloudWatch logs, identifies semantically anomalous sections using [Cordon](https://github.com/calebevans/cordon), generates a root cause analysis, and calls the on-call engineer to walk them through it -- powered by three Amazon Nova foundation models on Bedrock.
 
 ## How It Works
 

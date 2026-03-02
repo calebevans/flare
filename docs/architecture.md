@@ -1,6 +1,6 @@
 # Flare Architecture
 
-Flare is a voice-driven incident commander that autonomously analyzes AWS CloudWatch logs and calls the on-call engineer with a root cause analysis and interactive investigation tools. It is powered by three Amazon Nova foundation models working together across a serverless AWS pipeline.
+Flare is a voice-driven triage assistant that autonomously analyzes AWS CloudWatch logs and calls the on-call engineer with a root cause analysis and interactive investigation tools. It is powered by three Amazon Nova foundation models working together across a serverless AWS pipeline.
 
 ---
 

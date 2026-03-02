@@ -50,7 +50,7 @@ Each async step (locale build, version creation) is polled until complete, with 
 |----------|----------------|
 | Amazon Connect instance | Outbound calling enabled, managed identity |
 | US DID phone number | Claimed automatically, used as caller ID |
-| Lex V2 bot | FlareCommander with Nova 2 Sonic S2S, intents, and utterances |
+| Lex V2 bot | FlareTriage with Nova 2 Sonic S2S, intents, and utterances |
 | Contact flow | Set Voice (Generative), Lambda invoke, Nova Sonic briefing + conversation |
 | DynamoDB table | Incident state and pre-fetched investigation cache |
 | SSM parameter | Stores Connect config (instance ID, flow ID, phone number) for the base stack |
