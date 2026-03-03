@@ -241,10 +241,16 @@ def _gather_data_for_question(
         live = _live_status_check(slots)
         if "error" not in live:
             return live
-        return _smart_resource_lookup(user_question, cached, config)
+        return _smart_resource_lookup(user_question, config)
 
-    if intent_name in ("CheckNetworking", "CheckDeployments", "FallbackIntent"):
-        return _smart_resource_lookup(user_question, cached, config)
+    if intent_name == "CheckNetworking":
+        return _live_network_lookup()
+
+    if intent_name == "CheckDeployments":
+        return _live_deployment_lookup()
+
+    if intent_name == "FallbackIntent":
+        return _smart_resource_lookup(user_question, config)
 
     if intent_name == "SuggestFix":
         return cached
@@ -355,32 +361,51 @@ def _guess_dimensions(resource_hint: str) -> dict[str, str]:
     return {"InstanceId": resource_hint}
 
 
+def _live_network_lookup() -> dict[str, Any]:
+    """Fetch security groups, VPCs, and subnets directly from EC2."""
+    sgs = tools.describe_resource("ec2", "describe_security_groups")
+    vpcs = tools.describe_resource("ec2", "describe_vpcs")
+    subnets = tools.describe_resource("ec2", "describe_subnets")
+    return {
+        "security_groups": sgs,
+        "vpcs": vpcs,
+        "subnets": subnets,
+    }
+
+
+def _live_deployment_lookup() -> dict[str, Any]:
+    """Fetch CloudFormation stacks and recent stack events."""
+    stacks = tools.describe_resource(
+        "cloudformation", "describe_stacks"
+    )
+    events = tools.describe_resource(
+        "cloudformation", "describe_stack_events"
+    )
+    return {"stacks": stacks, "recent_events": events}
+
+
 _LOOKUP_TEMPLATE_SOURCE = """\
 {
-  "api_call": {{ gen("Given this question from an on-call engineer: '{question}' and this cached investigation data: {cached_summary} -- if the cached data can already answer the question, respond with exactly: use_cache -- otherwise respond with exactly one boto3 API call in service.operation format using snake_case, like ec2.describe_security_groups or rds.describe_db_instances or ecs.describe_services. Only use read-only operations starting with describe_, get_, or list_. You have full access to all AWS services.", max_tokens=60, temperature=0.0) }}
+  "api_call": {{ gen("The on-call engineer asked: '{question}' -- respond with exactly one boto3 API call in service.operation format using snake_case, like ec2.describe_security_groups or rds.describe_db_instances or ecs.describe_services or ec2.describe_vpcs. Only use read-only operations starting with describe_, get_, or list_.", max_tokens=30, temperature=0.0) }}
 }"""  # noqa: E501
 
 
 def _smart_resource_lookup(
     question: str,
-    cached: dict[str, Any],
     config: FlareConfig,
 ) -> Any:
     """Ask Nova 2 Lite which AWS API to call, then execute it.
 
     Uses a Genji template to guarantee valid JSON structure.  The LLM
     only generates a ``service.operation`` string; the template owns
-    the JSON brackets and keys.
+    the JSON brackets and keys.  Always makes a live API call -- the
+    cache has already been checked at the intent routing level.
     """
-    cached_summary = json.dumps(cached, default=str)
-    if len(cached_summary) > 4000:
-        cached_summary = cached_summary[:4000] + "..."
-
     try:
         backend = GenjiBackend(
             model=config.litellm_model,
             temperature=0.0,
-            max_tokens=60,
+            max_tokens=30,
             add_system_prompt=True,
         )
         template = GenjiTemplate(
@@ -388,27 +413,19 @@ def _smart_resource_lookup(
             backend=backend,
             default_filter="json",
         )
-        plan = template.render_json(
-            question=question,
-            cached_summary=cached_summary,
-        )
+        plan = template.render_json(question=question)
     except Exception:
         logger.exception("Smart lookup Genji render failed")
         return {
-            "cached": cached,
             "lookup_error": "Failed to determine which AWS API to call.",
         }
 
     api_call = str(plan.get("api_call", "")).strip()
     logger.info("Smart lookup api_call: %s", api_call)
 
-    if api_call == "use_cache":
-        return cached
-
     if "." not in api_call:
         logger.warning("Smart lookup returned invalid api_call: %s", api_call)
         return {
-            "cached": cached,
             "lookup_error": (
                 "Could not determine which AWS API to call "
                 f"from model response: {api_call}"
@@ -426,9 +443,9 @@ def _smart_resource_lookup(
     if "error" in result:
         logger.warning("Smart lookup API call failed: %s", result["error"])
         return {
-            "cached": cached,
             "lookup_error": (
-                f"Attempted {service}.{operation} but it failed: {result['error']}"
+                f"Attempted {service}.{operation} "
+                f"but it failed: {result['error']}"
             ),
         }
 
@@ -436,7 +453,7 @@ def _smart_resource_lookup(
         "Smart lookup result keys: %s",
         list(result.keys()) if isinstance(result, dict) else type(result),
     )
-    return {"cached": cached, "live_lookup": result}
+    return {"live_lookup": result}
 
 
 def _reason_about_data(
