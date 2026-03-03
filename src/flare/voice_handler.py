@@ -375,12 +375,8 @@ def _live_network_lookup() -> dict[str, Any]:
 
 def _live_deployment_lookup() -> dict[str, Any]:
     """Fetch CloudFormation stacks and recent stack events."""
-    stacks = tools.describe_resource(
-        "cloudformation", "describe_stacks"
-    )
-    events = tools.describe_resource(
-        "cloudformation", "describe_stack_events"
-    )
+    stacks = tools.describe_resource("cloudformation", "describe_stacks")
+    events = tools.describe_resource("cloudformation", "describe_stack_events")
     return {"stacks": stacks, "recent_events": events}
 
 
@@ -444,8 +440,7 @@ def _smart_resource_lookup(
         logger.warning("Smart lookup API call failed: %s", result["error"])
         return {
             "lookup_error": (
-                f"Attempted {service}.{operation} "
-                f"but it failed: {result['error']}"
+                f"Attempted {service}.{operation} but it failed: {result['error']}"
             ),
         }
 
