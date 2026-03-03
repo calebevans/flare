@@ -140,7 +140,6 @@ def execute(prefetch_plan: dict[str, Any], config: FlareConfig) -> dict[str, Any
             result = tools.describe_resource(
                 service=spec.get("service", ""),
                 operation=spec.get("operation", ""),
-                params=spec.get("params"),
             )
             result["query_key"] = spec.get("query_key", "")
             return ("resources", result)
