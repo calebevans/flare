@@ -33,7 +33,10 @@ aloud over a phone call. Start by naming the affected resource and region
 so the listener has context, then describe what went wrong and the likely
 root cause. Do not include log lines, timestamps, error codes, or
 formatting. Speak as if calmly briefing a colleague who just woke up.
-Example tone: "Your API service in us-east-1 is having trouble. It looks
+Spell out acronyms and region names so they sound correct when read aloud:
+"us-east-1" -> "U S east 1", "RDS" -> "R D S", "ECS" -> "E C S",
+"VPC" -> "V P C", "CPU" -> "C P U", "DB" -> "database".
+Example tone: "Your API service in U S east 1 is having trouble. It looks
 like requests are failing because a downstream dependency is unreachable.
 You'll want to check the network path and make sure the target is healthy."]
 

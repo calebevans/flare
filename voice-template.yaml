@@ -492,6 +492,81 @@ Resources:
                 - Utterance: "No thank you that is all"
               FulfillmentCodeHook:
                 Enabled: true
+            - Name: CheckNetworking
+              Description: Investigate security groups, VPCs, subnets, and network configuration
+              SampleUtterances:
+                - Utterance: "Check the security groups"
+                - Utterance: "What are the network settings"
+                - Utterance: "Are there any firewall rules blocking traffic"
+                - Utterance: "Show me the VPC configuration"
+                - Utterance: "What subnets is it running in"
+                - Utterance: "Check the inbound rules"
+                - Utterance: "Is there a network issue"
+                - Utterance: "Can you look at the routing"
+                - Utterance: "Check the network for {resource}"
+                - Utterance: "What are the security group rules"
+                - Utterance: "Is something blocking the connection"
+                - Utterance: "Check if there is a firewall issue"
+              SlotPriorities:
+                - Priority: 1
+                  SlotName: resource
+              Slots:
+                - Name: resource
+                  SlotTypeName: AMAZON.AlphaNumeric
+                  ValueElicitationSetting:
+                    SlotConstraint: Optional
+                    PromptSpecification:
+                      MaxRetries: 1
+                      MessageGroupsList:
+                        - Message:
+                            PlainTextMessage:
+                              Value: "Which resource?"
+              FulfillmentCodeHook:
+                Enabled: true
+            - Name: CheckDeployments
+              Description: Check for recent deployments or configuration changes
+              SampleUtterances:
+                - Utterance: "Were there any recent deployments"
+                - Utterance: "Has anything changed recently"
+                - Utterance: "Check for recent changes"
+                - Utterance: "Was there a deployment"
+                - Utterance: "What was the last change"
+                - Utterance: "Show me recent CloudFormation events"
+                - Utterance: "Did someone push a change"
+                - Utterance: "Any recent updates to {resource}"
+                - Utterance: "When was the last deployment"
+                - Utterance: "Check the change history"
+              SlotPriorities:
+                - Priority: 1
+                  SlotName: resource
+              Slots:
+                - Name: resource
+                  SlotTypeName: AMAZON.AlphaNumeric
+                  ValueElicitationSetting:
+                    SlotConstraint: Optional
+                    PromptSpecification:
+                      MaxRetries: 1
+                      MessageGroupsList:
+                        - Message:
+                            PlainTextMessage:
+                              Value: "Which resource?"
+              FulfillmentCodeHook:
+                Enabled: true
+            - Name: SuggestFix
+              Description: Ask for remediation guidance or next steps
+              SampleUtterances:
+                - Utterance: "What should I do to fix this"
+                - Utterance: "How do I fix this"
+                - Utterance: "What are the next steps"
+                - Utterance: "What do you recommend"
+                - Utterance: "How do I resolve this"
+                - Utterance: "What is the fix"
+                - Utterance: "Walk me through the remediation"
+                - Utterance: "How do I restore service"
+                - Utterance: "What can I do right now"
+                - Utterance: "How do I get this back up"
+              FulfillmentCodeHook:
+                Enabled: true
             - Name: FallbackIntent
               Description: Catch-all for unmatched questions
               ParentIntentSignature: "AMAZON.FallbackIntent"

@@ -243,8 +243,11 @@ def _gather_data_for_question(
             return live
         return _smart_resource_lookup(user_question, cached, config)
 
-    if intent_name == "FallbackIntent":
+    if intent_name in ("CheckNetworking", "CheckDeployments", "FallbackIntent"):
         return _smart_resource_lookup(user_question, cached, config)
+
+    if intent_name == "SuggestFix":
+        return cached
 
     # Summarize -- send all cached data
     return cached
